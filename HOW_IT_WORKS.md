@@ -1,8 +1,12 @@
 # Keyboard Layout Watchdog — How It Works
 
 A Windows tool that fixes typing in the wrong keyboard layout (Thai
-Kedmanee ↔ US English). You press **F8** and the last word is rewritten
-in the layout you actually meant.
+Kedmanee ↔ US English).
+
+- Press **F7** — convert the text you have highlighted (mouse-drag or
+  Shift+arrow).
+- Press **F8** — convert the highlighted text, or if nothing is
+  highlighted, automatically grab the last word you typed.
 
 ---
 
@@ -81,9 +85,9 @@ How it works internally:
 The constants `LANG_TH = 0x041E` and `LANG_EN_US = 0x0409` are Windows'
 internal language IDs.
 
-**Note:** `get_current_layout()` exists but we don't use it anymore —
-turned out to be unreliable on this machine. We detect the layout from
-the typed text itself (see below).
+**Note:** We don't ask Windows for the current layout — that turned out
+to be unreliable on this machine. We detect the layout from the typed
+text itself (see below).
 
 ---
 
@@ -94,16 +98,28 @@ This is where everything comes together. The whole thing runs in two parts:
 #### Setup (the `main()` function)
 
 ```python
-keyboard.add_hotkey("f8", _convert, suppress=True)
+keyboard.add_hotkey("f7", _convert_selection_only, suppress=False)
+keyboard.add_hotkey("f8", _convert_smart,           suppress=False)
 keyboard.wait("ctrl+alt+q")
 ```
 
-- Registers F8 → call `_convert()` when pressed.
-- `suppress=True` means the F8 keypress is *consumed* — it doesn't reach
-  whatever app you're typing in.
+- Registers F7 / F8 with their handlers.
+- `suppress=False` is intentional — `suppress=True` silently fails on
+  some Windows setups; without it the F-keys still reach other apps but
+  the hotkey actually fires.
 - Then waits forever until you press Ctrl+Alt+Q to quit.
 
-#### What `_convert()` does (when you press F8)
+#### F7 vs F8
+
+| Key | Handler                     | Behavior                                          |
+|-----|-----------------------------|---------------------------------------------------|
+| F7  | `_convert_selection_only`   | Convert what you've highlighted; do nothing if no selection |
+| F8  | `_convert_smart`            | Convert highlighted text, or auto-grab the last word |
+
+Both eventually call the shared `_do_convert(full_sel, word)` which does
+the actual layout detection, remapping, and paste.
+
+#### What `_do_convert()` does
 
 **Step 1: Figure out what to convert**
 
@@ -219,19 +235,6 @@ You'll see `time.sleep(0.05)` and similar sprinkled around. These are
   paste happens *after* the switch.
 
 Without these sleeps the tool randomly fails because operations race.
-
----
-
-## Files You Don't Need to Touch
-
-- **`detector.py`** — leftover from an earlier version that used
-  pythainlp + nltk word lists to auto-detect mistypes. Abandoned because
-  it caused tons of false positives. Kept for reference but unused.
-- **`setup_dicts.py`** — downloaded the nltk wordlist for that old
-  detector. Also unused now.
-- **`test_detector.py`** — unit test for the abandoned detector.
-
-You could delete all three; the tool works without them.
 
 ---
 
